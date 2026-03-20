@@ -1,5 +1,7 @@
 # LinkedIn Games Solver
 
+![Exemple de solution pour Zip](img/example.png)
+
 Extension Chrome qui résout automatiquement les puzzles LinkedIn Games :
 - [Queens](https://www.linkedin.com/games/queens/)
 - [Zip](https://www.linkedin.com/games/zip/)
@@ -8,6 +10,8 @@ Extension Chrome qui résout automatiquement les puzzles LinkedIn Games :
 - [Patches](https://www.linkedin.com/games/patches/)
 
 ## Fonctionnement
+
+![Exemple de solution pour Zip](img/widget.png)
 
 Deux modes au choix :
 
@@ -53,15 +57,21 @@ La clé API est sauvegardée localement dans le navigateur (jamais transmise ail
 
 Les logs préfixés `[Games Solver]` détaillent chaque étape. Pour Zip, le chemin complet est affiché sous forme visuelle :
 
-```
-[Games Solver] Chemin :
-  1- 2  3  4  5  6  7
-  |
-  8- 9-10-11 12-13 14
-            |
- 15 16 17 18-19 20 21
-  ...
-```
+**Exemple pour Zip** : les cases sont numérotées selon l'ordre de passage, avec les waypoints `W1`, `W2`, etc. Les connexions entre cases sont indiquées par des traits horizontaux (`-`) et verticaux (`|`).
+
+![Games Solver](img/log_zip.png)
+
+**Exemple pour SUDOKU** : les chiffres sont affichés dans une grille 9×9.
+
+![Games Solver](img/log_sudoku.png)
+
+**Exemple pour Tango** : les symboles `=` et `x` sont affichés dans une grille, avec les contraintes d'équilibre indiquées.
+
+![Games Solver](img/log_tango.png)
+
+**Exemple pour Queens** : les cases avec une reine sont marquées `Q`, les cases vides sont `.`. Les régions de couleur sont indiquées par des lettres (`A`, `B`, `C`, etc.) et les connexions entre cases par des traits.
+
+![Games Solver](img/log_queens.png)
 
 - Les nombres indiquent l'ordre de passage (étape 1 à N)
 - Les waypoints obligatoires sont préfixés `W` (`W1`, `W2`, ...)

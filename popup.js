@@ -62,6 +62,11 @@ solveBtn.addEventListener('click', async () => {
   solveBtn.disabled = true;
   setStatus('Lecture de la grille...', 'loading');
 
+  // Re-inject content script to handle SPA navigation (no page reload between games)
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+  } catch (_) { /* already injected or CSP issue — proceed anyway */ }
+
   chrome.tabs.sendMessage(tab.id, { action: 'readGrid' }, async (response) => {
     if (chrome.runtime.lastError || !response) {
       setStatus('Impossible de lire la grille. Rechargez la page.', 'error');

@@ -20,11 +20,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // ─── Game detection ──────────────────────────────────────────────────────────
 
 function detectGame() {
-  if (document.querySelector('[data-testid="tango-game-container"]'))   return 'tango';
-  if (document.querySelector('[data-sudoku-grid="true"]'))              return 'sudoku';
-  if (document.querySelector('[data-cell-content="true"]'))             return 'zip';
-  if (document.querySelector('[data-testid="patches-game-container"]')) return 'patches';
-  if (document.querySelector('[data-testid="interactive-grid"]'))       return 'queens';
+  const path = window.location.pathname;
+  if (path.includes('/games/tango'))       return 'tango';
+  if (path.includes('/games/mini-sudoku')) return 'sudoku';
+  if (path.includes('/games/zip'))         return 'zip';
+  if (path.includes('/games/patches'))     return 'patches';
+  if (path.includes('/games/queens'))      return 'queens';
   return null;
 }
 
@@ -798,6 +799,10 @@ async function applyPatchesSolution(regions, size) {
 // MESSAGE LISTENER
 // ════════════════════════════════════════════════════════════════════════════
 
+// Guard against duplicate listeners on SPA re-injection
+if (!window.__gamesSolverInitialized) {
+  window.__gamesSolverInitialized = true;
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.action === 'readGrid') {
@@ -857,3 +862,5 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 });
+
+} // end __gamesSolverInitialized guard
