@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Queens Solver",
-  "version": "1.0",
-  "description": "Résout automatiquement le jeu Queens de LinkedIn via l'IA Claude",
+  "name": "LinkedIn Games Solver",
+  "version": "1.1",
+  "description": "Résout automatiquement Queens et Mini Sudoku de LinkedIn",
   "permissions": [
     "activeTab",
     "storage",
@@ -14,14 +14,19 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Queens Solver"
+    "default_title": "LinkedIn Games Solver"
   },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/games/queens/*"],
+      "matches": [
+        "https://www.linkedin.com/games/queens/*",
+        "https://www.linkedin.com/games/mini-sudoku/*",
+        "https://www.linkedin.com/games/tango/*",
+        "https://www.linkedin.com/games/zip/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

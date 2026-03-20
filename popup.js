@@ -1,4 +1,5 @@
 const apiKeyInput  = document.getElementById('apiKey');
+const titleEl      = document.getElementById('title');
 const solveBtn     = document.getElementById('solveBtn');
 const statusDiv    = document.getElementById('status');
 const claudeConfig = document.getElementById('claudeConfig');
@@ -13,6 +14,15 @@ function getMethod() {
   return document.querySelector('input[name="method"]:checked')?.value || 'local';
 }
 
+// Update title based on current tab
+chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+  const url = tab?.url || '';
+  if (url.includes('mini-sudoku'))  titleEl.textContent = 'Mini Sudoku Solver';
+  else if (url.includes('queens'))  titleEl.textContent = 'Queens Solver';
+  else if (url.includes('tango'))   titleEl.textContent = 'Tango Solver';
+  else if (url.includes('/zip'))    titleEl.textContent = 'Zip Solver';
+});
+
 // Restore saved preferences
 chrome.storage.local.get(['anthropicApiKey', 'solverMethod'], ({ anthropicApiKey, solverMethod }) => {
   const method = solverMethod || 'local';
@@ -21,7 +31,6 @@ chrome.storage.local.get(['anthropicApiKey', 'solverMethod'], ({ anthropicApiKey
   if (anthropicApiKey) apiKeyInput.value = anthropicApiKey;
 });
 
-// Show/hide API key field based on selected method
 radios.forEach(radio => {
   radio.addEventListener('change', () => {
     const method = getMethod();
@@ -36,16 +45,16 @@ solveBtn.addEventListener('click', async () => {
 
   if (method === 'claude') {
     const apiKey = apiKeyInput.value.trim();
-    if (!apiKey) {
-      setStatus('Veuillez entrer votre clé API Anthropic.', 'error');
-      return;
-    }
+    if (!apiKey) { setStatus('Veuillez entrer votre clé API Anthropic.', 'error'); return; }
     chrome.storage.local.set({ anthropicApiKey: apiKey });
   }
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab.url.includes('linkedin.com/games/queens')) {
-    setStatus('Ouvrez la page LinkedIn Queens d\'abord.', 'error');
+  const url = tab.url || '';
+
+  const knownGames = ['games/queens', 'games/mini-sudoku', 'games/tango', 'games/zip'];
+  if (!knownGames.some(g => url.includes(g))) {
+    setStatus('Ouvrez Queens, Mini Sudoku ou Tango sur LinkedIn.', 'error');
     return;
   }
 
@@ -64,19 +73,23 @@ solveBtn.addEventListener('click', async () => {
       return;
     }
 
+    const game = response.game; // 'queens' or 'sudoku'
+
     if (method === 'local') {
       setStatus('Résolution en cours...', 'loading');
-      chrome.tabs.sendMessage(tab.id, {
-        action: 'solveAndApplyLocal',
-        grid: response.grid,
-        size: response.size,
-      }, (res) => {
+
+      const localMsg = game === 'sudoku'
+        ? { action: 'solveAndApplyLocal', game: 'sudoku', board: response.board, rows: response.rows, cols: response.cols }
+        : game === 'tango'
+        ? { action: 'solveAndApplyLocal', game: 'tango', cells: response.cells, size: response.size, constraints: response.constraints }
+        : game === 'zip'
+        ? { action: 'solveAndApplyLocal', game: 'zip', size: response.size, waypoints: response.waypoints }
+        : { action: 'solveAndApplyLocal', game: 'queens', grid: response.grid, size: response.size };
+
+      chrome.tabs.sendMessage(tab.id, localMsg, (res) => {
         solveBtn.disabled = false;
-        if (res?.success) {
-          setStatus('Grille résolue !', 'success');
-        } else {
-          setStatus(res?.error || 'Aucune solution trouvée.', 'error');
-        }
+        if (res?.success) setStatus('Grille résolue !', 'success');
+        else setStatus(res?.error || 'Aucune solution trouvée.', 'error');
       });
 
     } else {
@@ -84,7 +97,7 @@ solveBtn.addEventListener('click', async () => {
       const apiKey = apiKeyInput.value.trim();
 
       chrome.runtime.sendMessage(
-        { action: 'solveWithClaude', grid: response.grid, size: response.size, apiKey },
+        { action: 'solveWithClaude', game, ...response, apiKey },
         (solveRes) => {
           if (chrome.runtime.lastError || !solveRes) {
             setStatus('Erreur lors de l\'appel à Claude.', 'error');
@@ -98,16 +111,19 @@ solveBtn.addEventListener('click', async () => {
           }
 
           setStatus('Application de la solution...', 'loading');
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'applySolution',
-            solution: solveRes.solution,
-          }, (applyRes) => {
+
+          const applyMsg = game === 'sudoku'
+            ? { action: 'applySolution', game: 'sudoku', board: response.board, solvedGrid: solveRes.solvedGrid, rows: response.rows, cols: response.cols }
+            : game === 'tango'
+            ? { action: 'applySolution', game: 'tango', cells: response.cells, solvedGrid: solveRes.solvedGrid, size: response.size }
+            : game === 'zip'
+            ? { action: 'applySolution', game: 'zip', path: solveRes.path, size: response.size }
+            : { action: 'applySolution', game: 'queens', solution: solveRes.solution };
+
+          chrome.tabs.sendMessage(tab.id, applyMsg, (applyRes) => {
             solveBtn.disabled = false;
-            if (applyRes?.success) {
-              setStatus('Grille résolue !', 'success');
-            } else {
-              setStatus('Erreur lors de l\'application.', 'error');
-            }
+            if (applyRes?.success) setStatus('Grille résolue !', 'success');
+            else setStatus('Erreur lors de l\'application.', 'error');
           });
         }
       );
