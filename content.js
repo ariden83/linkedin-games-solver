@@ -139,9 +139,9 @@ async function applyQueensSolution(solution) {
     if (!cell) { WARN(`Case introuvable (${row},${col})`); continue; }
     LOG(`  reine (${row + 1},${col + 1})`);
     tapPointerOnly(cell);
-    await sleep(80);
+    await sleep(160);
     tapPointerOnly(cell);
-    await sleep(200);
+    await sleep(400);
   }
   return { success: true };
 }
@@ -402,11 +402,19 @@ function tapEl(el) {
   el.dispatchEvent(new MouseEvent ('click',       mOpts));
 }
 
-async function clickUntilTangoValue(cell, targetVal) {
+function nudgeHover(el) {
+  const rect = el.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top  + rect.height / 2;
+  el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+}
+
+async function clickUntilTangoValue(cell, container, targetVal) {
   for (let i = 0; i < 4; i++) {
     if (getTangoState(cell) === targetVal) return true;
+    nudgeHover(container);
     tapEl(cell);
-    await sleep(200);
+    await sleep(400);
   }
   return getTangoState(cell) === targetVal;
 }
@@ -422,9 +430,11 @@ async function applyTangoSolution(originalCells, solvedGrid, size) {
     const cell = container.querySelector(`[data-cell-idx="${idx}"]`);
     if (!cell) { WARN(`Case introuvable idx=${idx}`); continue; }
     const target = solvedGrid[idx];
-    const ok = await clickUntilTangoValue(cell, target);
+    nudgeHover(container);
+    const ok = await clickUntilTangoValue(cell, container, target);
     const r = Math.floor(idx / size), c = idx % size;
     LOG(`  (${r + 1},${c + 1}) = ${symbols[target]} : ${ok ? 'OK' : 'ECHEC'}`);
+    await sleep(150);
   }
   return { success: true };
 }
