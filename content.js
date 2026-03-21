@@ -555,37 +555,65 @@ async function applyZipSolution(pathCells, size) {
   const firstCell = getCell(pathCells[0]);
   if (!firstCell) return { success: false, error: 'Première case introuvable.' };
 
-  // ── Mode 1 : drag (pointer + mouse events) ───────────────────────────────
+  // ── Mode 1 : drag lent interpolé, événements sur l'élément sous le curseur ─
   const tryDrag = async () => {
-    const { x: sx, y: sy } = getCenter(firstCell);
     const mkPtr = (type, x, y) => new PointerEvent(type, {
       bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, buttons: 1, clientX: x, clientY: y,
     });
     const mkMouse = (type, x, y) => new MouseEvent(type, {
       bubbles: true, cancelable: true, buttons: 1, clientX: x, clientY: y,
     });
+    const lerp   = (a, b, t) => a + (b - a) * t;
+    const cellAt = (x, y) => document.elementFromPoint(x, y)?.closest('[data-cell-idx]');
 
+    const { x: sx, y: sy } = getCenter(firstCell);
     firstCell.dispatchEvent(mkPtr('pointerdown', sx, sy));
     firstCell.dispatchEvent(mkMouse('mousedown', sx, sy));
-    await sleep(60);
+    await sleep(160);
+
+    let curX = sx, curY = sy;
+    let underCell = firstCell;
 
     for (let i = 1; i < pathCells.length; i++) {
       const cell = getCell(pathCells[i]);
       if (!cell) { WARN(`Case ${pathCells[i]} introuvable`); continue; }
-      const { x, y } = getCenter(cell);
-      cell.dispatchEvent(mkPtr('pointerover', x, y));
-      cell.dispatchEvent(mkPtr('pointermove', x, y));
-      document.dispatchEvent(mkPtr('pointermove', x, y));
-      cell.dispatchEvent(mkMouse('mousemove', x, y));
-      document.dispatchEvent(mkMouse('mousemove', x, y));
-      await sleep(25);
+      const { x: tx, y: ty } = getCenter(cell);
+
+      const dist  = Math.hypot(tx - curX, ty - curY);
+      const steps = Math.max(5, Math.round(dist / 8));
+
+      for (let s = 1; s <= steps; s++) {
+        const x = lerp(curX, tx, s / steps);
+        const y = lerp(curY, ty, s / steps);
+
+        const el = cellAt(x, y) || underCell;
+
+        if (el !== underCell) {
+          underCell.dispatchEvent(mkMouse('mouseout',   x, y));
+          underCell.dispatchEvent(mkMouse('mouseleave', x, y));
+          underCell.dispatchEvent(mkPtr ('pointerout',  x, y));
+          el.dispatchEvent(mkMouse('mouseover',   x, y));
+          el.dispatchEvent(mkMouse('mouseenter',  x, y));
+          el.dispatchEvent(mkPtr ('pointerover',  x, y));
+          el.dispatchEvent(mkPtr ('pointerenter', x, y));
+          underCell = el;
+        }
+
+        el.dispatchEvent(mkPtr ('pointermove', x, y));
+        document.dispatchEvent(mkPtr ('pointermove', x, y));
+        el.dispatchEvent(mkMouse('mousemove',   x, y));
+        document.dispatchEvent(mkMouse('mousemove',   x, y));
+        await sleep(14);
+      }
+
+      curX = tx; curY = ty;
     }
 
-    const lastCell = getCell(pathCells[pathCells.length - 1]);
-    const { x: ex, y: ey } = getCenter(lastCell);
-    lastCell.dispatchEvent(mkPtr('pointerup', ex, ey));
-    lastCell.dispatchEvent(mkMouse('mouseup', ex, ey));
-    await sleep(100);
+    underCell.dispatchEvent(mkPtr ('pointerup', curX, curY));
+    document.dispatchEvent(mkPtr ('pointerup', curX, curY));
+    underCell.dispatchEvent(mkMouse('mouseup',  curX, curY));
+    document.dispatchEvent(mkMouse('mouseup',   curX, curY));
+    await sleep(200);
   };
 
   // ── Mode 2 : individual clicks ────────────────────────────────────────────
@@ -596,7 +624,7 @@ async function applyZipSolution(pathCells, size) {
       cell.click();
       await sleep(30);
     }
-    await sleep(100);
+    await sleep(200);
   };
 
   // Try drag first, fall back to clicks if nothing got filled
@@ -786,7 +814,7 @@ async function applyPatchesSolution(regions, size) {
       // Appuyer sur la case-ancre (case colorée avec chiffre)
       anchorCell.dispatchEvent(mkPtr('pointerdown', sx, sy));
       anchorCell.dispatchEvent(mkMouse('mousedown', sx, sy));
-      await sleep(80);
+      await sleep(160);
 
       // Glisser case par case avec interpolation (mouvement humain)
       let curX = sx, curY = sy;
@@ -824,7 +852,7 @@ async function applyPatchesSolution(regions, size) {
           document.dispatchEvent(mkPtr ('pointermove', x, y));
           el.dispatchEvent(mkMouse('mousemove',   x, y));
           document.dispatchEvent(mkMouse('mousemove',   x, y));
-          await sleep(7);
+          await sleep(14);
         }
 
         curX = tx; curY = ty;
@@ -835,7 +863,7 @@ async function applyPatchesSolution(regions, size) {
       document.dispatchEvent(mkPtr ('pointerup', curX, curY));
       underCell.dispatchEvent(mkMouse('mouseup',  curX, curY));
       document.dispatchEvent(mkMouse('mouseup',   curX, curY));
-      await sleep(200);
+      await sleep(600);
     }
   };
 
