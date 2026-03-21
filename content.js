@@ -732,6 +732,7 @@ function solvePatchesGrid(size, anchors) {
 
   const solution = anchors.map((anchor, i) => ({
     color: anchor.color,
+    anchorIdx: anchor.idx,
     ...assignment[i],
     cells: rectCells(assignment[i]),
   }));
@@ -759,36 +760,105 @@ async function applyPatchesSolution(regions, size) {
     const r = cell.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   };
-  const mkPtr = (type, x, y) => new PointerEvent(type, {
+  const mkPtr   = (type, x, y) => new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, buttons: 1, clientX: x, clientY: y,
   });
+  const mkMouse = (type, x, y) => new MouseEvent(type, {
+    bubbles: true, cancelable: true, buttons: 1, clientX: x, clientY: y,
+  });
 
-  for (const region of regions) {
-    const { tr, tc, h, w, cells, color } = region;
-    LOG(`  ${color} : (ligne ${tr + 1}, col ${tc + 1}) → ${h}×${w}`);
+  const countFilled = () => container.querySelectorAll('[data-testid^="patches-clue-number-"]').length;
 
-    const tlCell = getCell(tr * size + tc);
-    const brCell = getCell((tr + h - 1) * size + (tc + w - 1));
-    if (!tlCell || !brCell) { WARN(`  Cases introuvables pour ${color}`); continue; }
+  // ── Mode 1 : drag lent interpolé, événements sur l'élément sous le curseur ─
+  const tryDrag = async () => {
+    const lerp     = (a, b, t) => a + (b - a) * t;
+    const cellAt   = (x, y) => document.elementFromPoint(x, y)?.closest('[data-cell-idx]');
 
-    const { x: sx, y: sy } = getCenter(tlCell);
-    const { x: ex, y: ey } = getCenter(brCell);
+    for (const region of regions) {
+      const { tr, tc, h, w, cells, color, anchorIdx } = region;
+      LOG(`  ${color} : (ligne ${tr + 1}, col ${tc + 1}) → ${h}×${w}`);
 
-    tlCell.dispatchEvent(mkPtr('pointerdown', sx, sy));
-    await sleep(60);
+      const anchorCell = getCell(anchorIdx);
+      if (!anchorCell) { WARN(`  Ancre introuvable pour ${color}`); continue; }
 
-    for (const idx of cells) {
-      const cell = getCell(idx);
-      if (!cell) continue;
-      const { x, y } = getCenter(cell);
-      cell.dispatchEvent(mkPtr('pointerover', x, y));
-      cell.dispatchEvent(mkPtr('pointermove', x, y));
-      document.dispatchEvent(mkPtr('pointermove', x, y));
-      await sleep(20);
+      const { x: sx, y: sy } = getCenter(anchorCell);
+
+      // Appuyer sur la case-ancre (case colorée avec chiffre)
+      anchorCell.dispatchEvent(mkPtr('pointerdown', sx, sy));
+      anchorCell.dispatchEvent(mkMouse('mousedown', sx, sy));
+      await sleep(80);
+
+      // Glisser case par case avec interpolation (mouvement humain)
+      let curX = sx, curY = sy;
+      let underCell = anchorCell;
+
+      for (const idx of cells) {
+        const target = getCell(idx);
+        if (!target) continue;
+        const { x: tx, y: ty } = getCenter(target);
+
+        const dist  = Math.hypot(tx - curX, ty - curY);
+        const steps = Math.max(5, Math.round(dist / 8));
+
+        for (let i = 1; i <= steps; i++) {
+          const x = lerp(curX, tx, i / steps);
+          const y = lerp(curY, ty, i / steps);
+
+          // Élément réellement sous le curseur à cette position
+          const el = cellAt(x, y) || underCell;
+
+          // Transition de case : mouseout/leave → mouseenter/over
+          if (el !== underCell) {
+            underCell.dispatchEvent(mkMouse('mouseout',   x, y));
+            underCell.dispatchEvent(mkMouse('mouseleave', x, y));
+            underCell.dispatchEvent(mkPtr ('pointerout',  x, y));
+            el.dispatchEvent(mkMouse('mouseover',   x, y));
+            el.dispatchEvent(mkMouse('mouseenter',  x, y));
+            el.dispatchEvent(mkPtr ('pointerover',  x, y));
+            el.dispatchEvent(mkPtr ('pointerenter', x, y));
+            underCell = el;
+          }
+
+          // Mouvement continu sur l'élément courant + document
+          el.dispatchEvent(mkPtr ('pointermove', x, y));
+          document.dispatchEvent(mkPtr ('pointermove', x, y));
+          el.dispatchEvent(mkMouse('mousemove',   x, y));
+          document.dispatchEvent(mkMouse('mousemove',   x, y));
+          await sleep(7);
+        }
+
+        curX = tx; curY = ty;
+      }
+
+      // Relâcher à la position finale
+      underCell.dispatchEvent(mkPtr ('pointerup', curX, curY));
+      document.dispatchEvent(mkPtr ('pointerup', curX, curY));
+      underCell.dispatchEvent(mkMouse('mouseup',  curX, curY));
+      document.dispatchEvent(mkMouse('mouseup',   curX, curY));
+      await sleep(200);
     }
+  };
 
-    brCell.dispatchEvent(mkPtr('pointerup', ex, ey));
-    await sleep(150);
+  // ── Mode 2 : clics individuels (fallback) ─────────────────────────────────
+  const tryClicks = async () => {
+    for (const region of regions) {
+      const { cells } = region;
+      for (const idx of cells) {
+        const cell = getCell(idx);
+        if (!cell) continue;
+        cell.click();
+        await sleep(30);
+      }
+      await sleep(100);
+    }
+  };
+
+  LOG('Tentative mode drag...');
+  await tryDrag();
+
+  if (countFilled() < regions.length) {
+    LOG('Drag sans effet — tentative mode clics...');
+    await tryClicks();
   }
 
   LOG('Application Patches terminée.');
