@@ -272,11 +272,10 @@ async function applySudokuSolution(board, solvedGrid, rows, cols) {
 // TANGO
 // ════════════════════════════════════════════════════════════════════════════
 
-// CSS classes that encode constraint direction
-// tango.html (v1):   horizontal=f684ab53  vertical=_4bbcfc68
-// tango_V2.html (v2): horizontal=_309210d7 vertical=c8bf568c
-const TANGO_CLASS_HORIZONTAL = '_309210d7';  // constraint → right neighbor (idx+1)
-const TANGO_CLASS_VERTICAL   = 'c8bf568c';  // constraint → bottom neighbor (idx+size)
+// Direction detection for tango constraints.
+// CSS class names for H/V changed across LinkedIn versions and are no longer reliable.
+// We use getBoundingClientRect() instead: if the constraint icon's horizontal center
+// is to the right of the cell's center, it's a horizontal (right-edge) constraint.
 
 function readTangoGrid() {
   const container = document.querySelector('[data-testid="interactive-grid"]');
@@ -299,8 +298,9 @@ function readTangoGrid() {
     const crossEl = cell.querySelector('[data-testid="edge-cross"]');
     const cEl     = equalEl || crossEl;
     if (cEl) {
-      const wClass    = cEl.closest('div')?.className || '';
-      const isHoriz   = wClass.includes(TANGO_CLASS_HORIZONTAL);
+      const cellRect  = cell.getBoundingClientRect();
+      const cRect     = cEl.getBoundingClientRect();
+      const isHoriz   = (cRect.left + cRect.right) / 2 > (cellRect.left + cellRect.right) / 2;
       const neighbor  = isHoriz ? idx + 1 : idx + size;
       constraints.push({ idx1: idx, idx2: neighbor, type: equalEl ? 'equal' : 'cross' });
       LOG(`  contrainte ${equalEl ? '=' : 'X'} entre cell ${idx} et ${neighbor} (${isHoriz ? 'H' : 'V'})`);
@@ -732,7 +732,7 @@ function readPatchesGrid() {
   const anchors = [];
   for (const cell of container.querySelectorAll('[data-cell-idx]')) {
     const cellStyle  = cell.getAttribute('style') || '';
-    const colorMatch = cellStyle.match(/--d0eb54f0:\s*(#[0-9a-fA-F]+)/);
+    const colorMatch = cellStyle.match(/--[a-f0-9]+:\s*(#[0-9a-fA-F]{6})\b/);
     if (!colorMatch) continue;
 
     const idx      = parseInt(cell.getAttribute('data-cell-idx'));
@@ -767,16 +767,31 @@ function solvePatchesGrid(size, anchors) {
     const shape = anchor.shape;
     const rects = [];
 
-    for (let h = 1; h <= n; h++) {
-      if (n % h !== 0) continue;
-      const w = n / h;
-      if (shape === 'PatchesShapeConstraint_HORIZONTAL_RECT' && w <= h) continue;
-      if (shape === 'PatchesShapeConstraint_VERTICAL_RECT'   && h <= w) continue;
+    if (n !== null) {
+      for (let h = 1; h <= n; h++) {
+        if (n % h !== 0) continue;
+        const w = n / h;
+        if (shape === 'PatchesShapeConstraint_HORIZONTAL_RECT' && w <= h) continue;
+        if (shape === 'PatchesShapeConstraint_VERTICAL_RECT'   && h <= w) continue;
 
-      // Enumerate all valid top-left corners where anchor falls inside the rect
-      for (let tr = Math.max(0, ar - h + 1); tr <= ar && tr + h <= size; tr++) {
-        for (let tc = Math.max(0, ac - w + 1); tc <= ac && tc + w <= size; tc++) {
-          rects.push({ tr, tc, h, w });
+        // Enumerate all valid top-left corners where anchor falls inside the rect
+        for (let tr = Math.max(0, ar - h + 1); tr <= ar && tr + h <= size; tr++) {
+          for (let tc = Math.max(0, ac - w + 1); tc <= ac && tc + w <= size; tc++) {
+            rects.push({ tr, tc, h, w });
+          }
+        }
+      }
+    } else {
+      // No size clue: try all valid rectangle dimensions containing the anchor
+      for (let h = 1; h <= size; h++) {
+        for (let w = 1; w <= size; w++) {
+          if (shape === 'PatchesShapeConstraint_HORIZONTAL_RECT' && w <= h) continue;
+          if (shape === 'PatchesShapeConstraint_VERTICAL_RECT'   && h <= w) continue;
+          for (let tr = Math.max(0, ar - h + 1); tr <= ar && tr + h <= size; tr++) {
+            for (let tc = Math.max(0, ac - w + 1); tc <= ac && tc + w <= size; tc++) {
+              rects.push({ tr, tc, h, w });
+            }
+          }
         }
       }
     }
@@ -871,7 +886,7 @@ async function applyPatchesSolution(regions, size) {
       // Appuyer sur la case-ancre (case colorée avec chiffre)
       anchorCell.dispatchEvent(mkPtr('pointerdown', sx, sy));
       anchorCell.dispatchEvent(mkMouse('mousedown', sx, sy));
-      await sleep(160);
+      await sleep(300);
 
       // Glisser case par case avec interpolation (mouvement humain)
       let curX = sx, curY = sy;
@@ -909,7 +924,7 @@ async function applyPatchesSolution(regions, size) {
           document.dispatchEvent(mkPtr ('pointermove', x, y));
           el.dispatchEvent(mkMouse('mousemove',   x, y));
           document.dispatchEvent(mkMouse('mousemove',   x, y));
-          await sleep(14);
+          await sleep(28);
         }
 
         curX = tx; curY = ty;
@@ -920,7 +935,7 @@ async function applyPatchesSolution(regions, size) {
       document.dispatchEvent(mkPtr ('pointerup', curX, curY));
       underCell.dispatchEvent(mkMouse('mouseup',  curX, curY));
       document.dispatchEvent(mkMouse('mouseup',   curX, curY));
-      await sleep(600);
+      await sleep(1200);
     }
   };
 
